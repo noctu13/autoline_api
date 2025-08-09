@@ -1,6 +1,7 @@
 from fastapi import Cookie, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.exceptions import (TokenInvalidClaimsException, 
     TokenInvalidException, TokenMissingException)
 from app.core.security.permissions import check_admin
@@ -29,7 +30,11 @@ def get_auth_service(
     password_hasher: PasswordHasher = Depends(get_password_hasher),
     token_service: TokenService = Depends(get_token_service)
 ) -> AuthService:
-    return AuthService(user_repo, password_hasher, token_service)
+    return AuthService(
+        user_repo,
+        password_hasher, 
+        token_service
+    )
 
 async def get_current_user(
     access_token: str = Cookie(None, alias="access_token"),
@@ -43,8 +48,10 @@ async def get_current_user(
         if payload.get("type") != "access":
             raise TokenInvalidClaimsException
         user_id = int(payload.get('sub'))
-        user = await auth_service.get_user_by_id(user_id)
-    except Exception:
+        user = await auth_service.get_user(user_id)
+    except Exception as e:
+        if settings.DEBUG_MODE:
+            raise e
         raise TokenInvalidException
     return user
 

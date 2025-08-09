@@ -4,13 +4,17 @@ from app.domain.entities.user import User
 
 class UserRepository(ABC):
     @abstractmethod
-    async def find_by_login(self, login: str) -> User | None:
+    async def get(self, *, id: int|None = None, login: str|None = None) -> User | None:
         pass
     
     @abstractmethod
-    async def create_user(self, user: User) -> User:
+    async def create(self, user: User) -> User:
         pass
     
     @abstractmethod
-    async def find_by_id(self, user_id: int) -> User | None:
+    async def update(self, user: User) -> User:
+        pass
+
+    @abstractmethod
+    async def delete(self, user: User) -> None:
         pass

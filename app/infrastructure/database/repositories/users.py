@@ -1,4 +1,4 @@
-from sqlalchemy import select, insert
+from sqlalchemy import select, insert, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -20,39 +20,67 @@ class SQLAlchemyUserRepository(UserRepository):
             role_id=model.role_id
         )
     
-    async def find_by_login(self, login: str) -> User | None:
-        query = select(UserModel).where(UserModel.login == login)
-        result = await self.session.execute(query)
-        user_model = result.scalar_one_or_none()
-        if user_model:
-            return self._to_entity(user_model)
-        return None
-    
-    async def find_by_id(self, user_id: int) -> User | None:
-        query = select(UserModel).where(UserModel.id == user_id)
-        result = await self.session.execute(query)
-        user_model = result.scalar_one_or_none()
-        if user_model:
-            return self._to_entity(user_model)
-        return None
-    
-    async def create_user(self, user: User) -> User:
+    async def _execute(self, stmt, commit=True):
         try:
-            stmt = (
-                insert(UserModel)
-                .values(
-                    login=user.login, 
-                    hashed_password=user.hashed_password,
-                    full_name=user.full_name,
-                    role_id=user.role_id,
-                )
-                .returning(UserModel)
-            )
             result = await self.session.execute(stmt)
-            await self.session.commit()
-            user_model = result.scalar_one()
+            if commit:
+                await self.session.commit()
         except SQLAlchemyError as e:
-            await self.session.rollback()
+            if commit:
+                await self.session.rollback()
             print(str(e.__dict__['orig']))
             raise DatabaseException
-        return self._to_entity(user_model)
+        if result:
+            user_model = result.scalar_one_or_none()
+            return self._to_entity(user_model) if user_model else None
+    
+    async def get(self, *, id: int|None = None, login: str|None = None) -> User | None:
+        """
+        user get universal method
+        - get(id=123)                 -> by id
+        - get(login="username")       -> by login
+        """
+        if id is not None and login is not None:
+            raise ValueError("Only one parameter (id or login) can be provided")
+        query = select(UserModel)
+        if id is not None:
+            query = query.where(UserModel.id == id)
+        elif login is not None:
+            query = query.where(UserModel.login == login)
+        else:
+            raise ValueError("Must provide either 'id' or 'login'")
+        return await self._execute(query, commit=False)
+    
+    async def create(self, user: User) -> User:
+        query = (
+            insert(UserModel)
+            .values(
+                login=user.login, 
+                hashed_password=user.hashed_password,
+                full_name=user.full_name,
+                role_id=user.role_id,
+            )
+            .returning(UserModel)
+        )
+        return await self._execute(query)
+    
+    async def update(self, user: User) -> User:
+        query = (
+            update(UserModel)
+            .where(UserModel.id == user.id)
+            .values(
+                login=user.login, 
+                hashed_password=user.hashed_password,
+                full_name=user.full_name,
+                role_id=user.role_id,
+            )
+            .returning(UserModel)
+        )
+        return await self._execute(query)
+    
+    async def delete(self, user: User) -> None:
+        query = (
+            delete(UserModel)
+            .where(UserModel.id == user.id)
+        )
+        return await self._execute(query)

@@ -5,6 +5,7 @@ from app.domain.entities.user import User, UserCreateDTO
 from app.domain.repositories.user import UserRepository
 from app.domain.services.password_hasher import PasswordHasher
 from app.domain.services.token_service import TokenService
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class AuthService:
@@ -19,7 +20,7 @@ class AuthService:
         self.token_service = token_service
     
     async def create_user(self, user_dto: UserCreateDTO) -> User:
-        existing_user = await self.user_repo.find_by_login(user_dto.login)
+        existing_user = await self.user_repo.get(login=user_dto.login)
         if existing_user:
             raise UserAlreadyExistsException
         if user_dto.role_id not in RoleID.values_set():
@@ -27,18 +28,18 @@ class AuthService:
         hashed_password = self.password_hasher.hash(user_dto.password)
         user_dto.password = None
         user_entity = user_dto.to_user(hashed_password)
-        return await self.user_repo.create_user(user_entity)
+        return await self.user_repo.create(user_entity)
     
     async def authenticate_user(self, login: str, password: str) -> User:
-        user = await self.user_repo.find_by_login(login)
+        user = await self.user_repo.get(login=login)
         if (not user or 
             not self.password_hasher.verify(password, user.hashed_password)
         ):
             raise WrongCredentialsException
         return user
     
-    async def get_user_by_id(self, user_id: int) -> User | None:
-        user = await self.user_repo.find_by_id(user_id)
+    async def get_user(self, user_id: int) -> User | None:
+        user = await self.user_repo.get(id=user_id)
         if not user:
             raise UserNotExistsException
         return user
